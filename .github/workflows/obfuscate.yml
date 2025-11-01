@@ -1,98 +1,75 @@
-name: Generate and Obfuscate Worker Script
+# .github/workflows/obfuscate.yml
 
+name: 'Obfuscate and Save to encry.js'
+
+# 设置触发条件
 on:
-  workflow_dispatch:
+  # 1. 定期调度 (Cron Job)
+  # '*/20 * * * *' 表示每隔 20 分钟运行一次 (UTC 时间)。
   schedule:
     - cron: '*/20 * * * *'
+  
+  # 2. 手动运行 (Workflow Dispatch)
+  workflow_dispatch:
 
+# 定义工作流中的任务（Job）
 jobs:
-  build-and-obfuscate:
+  obfuscate:
+    # 在最新的 Ubuntu 运行器上运行
     runs-on: ubuntu-latest
 
+    # 步骤
     steps:
+      # 1. 检出代码
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # 必须设置 token 权限，以便在后续步骤中提交更改
+          token: ${{ secrets.GITHUB_TOKEN }}
 
+      # 2. 设置 Node.js 环境
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20' 
 
-      - name: Install Obfuscator
-        run: npm install javascript-obfuscator
+      # 3. 安装混淆器
+      - name: Install javascript-obfuscator
+        run: npm install -g javascript-obfuscator
 
-      - name: Obfuscate from local source file
+      # 4. 混淆文件并输出到 encry.js
+      - name: Obfuscate vless.js to encry.js
         run: |
-          cat > obfuscate.js << 'EOF'
-          const JavaScriptObfuscator = require('javascript-obfuscator');
-          const fs = require('fs');
-          const path = require('path');
+          INPUT_FILE="vless.js"
+          OUTPUT_FILE="encry.js"
           
-          const sourceFileName = 'vless.js';
-          const outputFileName = 'encry.js';
-          const sourceFilePath = path.join(process.cwd(), sourceFileName);
-
-          if (!fs.existsSync(sourceFilePath)) {
-            console.error('错误：在路径 \'' + sourceFilePath + '\' 未找到源文件。请确保您的仓库根目录有名为 \'vless.js\' 的文件。');
-            process.exit(h);
-          }
-
-          const originalCode = fs.readFileSync(sourceFilePath, 'utf8');
-
-          if (!originalCode || originalCode.trim().length === 0) {
-            console.error('错误：源文件 ' + sourceFileName + ' 为空。');
-            process.exit(1);
-          }
-
-          const obfuscationOptions = {
-              compact: true,
-              controlFlowFlattening: false,
-              controlFlowFlatteningThreshold: 0,
-              deadCodeInjection: false,
-              stringArray: true,
-              stringArrayEncoding: ['base64'],
-              stringArrayThreshold: 1.0,
-              stringArrayRotate: true,
-              stringArrayShuffle: true,
-              stringArrayWrappersCount: 2,
-              stringArrayWrappersChainedCalls: false,
-              stringArrayWrappersParametersMaxCount: 3,
-              renameGlobals: true,
-              identifierNamesGenerator: 'mangled-shuffled',
-              identifierNamesCache: null,
-              identifiersPrefix: '',
-              renameProperties: false,
-              renamePropertiesMode: 'safe',
-              ignoreImports: false,
-              target: 'browser',
-              numbersToExpressions: false,
-              simplify: false,
-              splitStrings: true,
-              splitStringsChunkLength: 1,
-              transformObjectKeys: false,
-              unicodeEscapeSequence: true,
-              selfDefending: false,
-              debugProtection: false,
-              debugProtectionInterval: 0,
-              disableConsoleOutput: true,
-              domainLock: []
-          };
-
-          const obfuscatedCode = JavaScriptObfuscator.obfuscate(originalCode, obfuscationOptions).getObfuscatedCode();
-          
-          fs.writeFileSync(path.join(process.cwd(), outputFileName), obfuscatedCode, 'utf8');
-          console.log('成功将 \'' + sourceFileName + '\' 混淆并保存至 \'' + outputFileName + '\'。');
-          EOF
-          node obfuscate.js
-
-      - name: Commit and push the obfuscated file
-        run: |
-          git config --global user.name 'GitHub Actions Bot'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add 'encry.js'
-          if git diff --staged --quiet; then
-            echo "No changes to commit, the obfuscated file is already up-to-date."
+          if [ -f "$INPUT_FILE" ]; then
+            echo "Starting obfuscation of $INPUT_FILE..."
+            # 执行混淆操作，将结果输出到 OUTPUT_FILE
+            # 默认使用紧凑模式 (--compact true)
+            javascript-obfuscator $INPUT_FILE --output $OUTPUT_FILE --compact true
+            echo "Obfuscation complete. Result saved to $OUTPUT_FILE"
           else
-            git commit -m "每20分钟更新一次"
+            echo "Error: $INPUT_FILE not found in the root directory! Skipping job."
+            # 如果找不到源文件，则不继续执行后面的提交步骤
+            exit 0
+          fi
+
+      # 5. 配置 Git 用户信息（用于提交）
+      - name: Configure Git
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+
+      # 6. 提交混淆后的更改
+      - name: Commit and Push encry.js
+        run: |
+          # 检查 encry.js 是否已创建或更改
+          if [ -f "encry.js" ] && [ -n "$(git status --porcelain encry.js)" ]; then
+            git add encry.js
+            git commit -m "🤖 Chore: Auto-generate encry.js from vless.js"
             git push
+            echo "Changes committed and pushed."
+          else
+            echo "No changes detected in encry.js, skipping commit."
           fi
