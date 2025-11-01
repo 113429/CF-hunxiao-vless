@@ -2,30 +2,28 @@
 
 name: 'Obfuscate and Save to encry.js'
 
-# 设置触发条件
-on:
-  # 1. 定期调度 (Cron Job)
-  # '*/20 * * * *' 表示每隔 20 分钟运行一次 (UTC 时间)。
+于:
   schedule:
     - cron: '*/20 * * * *'
-  
-  # 2. 手动运行 (Workflow Dispatch)
   workflow_dispatch:
 
-# 定义工作流中的任务（Job）
+# =========================================================
+# 【重要】授予工作流写入权限给 contents
+permissions:
+  contents: write 
+# =========================================================
+
 jobs:
   obfuscate:
-    # 在最新的 Ubuntu 运行器上运行
     runs-on: ubuntu-latest
 
-    # 步骤
     steps:
       # 1. 检出代码
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          # 必须设置 token 权限，以便在后续步骤中提交更改
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # 在这里使用默认的 GITHUB_TOKEN 就足够了，因为权限已在顶部设置
+          token: ${{ secrets.GITHUB_TOKEN }} 
 
       # 2. 设置 Node.js 环境
       - name: Set up Node.js
@@ -45,17 +43,14 @@ jobs:
           
           if [ -f "$INPUT_FILE" ]; then
             echo "Starting obfuscation of $INPUT_FILE..."
-            # 执行混淆操作，将结果输出到 OUTPUT_FILE
-            # 默认使用紧凑模式 (--compact true)
             javascript-obfuscator $INPUT_FILE --output $OUTPUT_FILE --compact true
             echo "Obfuscation complete. Result saved to $OUTPUT_FILE"
           else
             echo "Error: $INPUT_FILE not found in the root directory! Skipping job."
-            # 如果找不到源文件，则不继续执行后面的提交步骤
             exit 0
           fi
 
-      # 5. 配置 Git 用户信息（用于提交）
+      # 5. 配置 Git 用户信息
       - name: Configure Git
         run: |
           git config user.name 'github-actions[bot]'
@@ -64,7 +59,6 @@ jobs:
       # 6. 提交混淆后的更改
       - name: Commit and Push encry.js
         run: |
-          # 检查 encry.js 是否已创建或更改
           if [ -f "encry.js" ] && [ -n "$(git status --porcelain encry.js)" ]; then
             git add encry.js
             git commit -m "🤖 Chore: Auto-generate encry.js from vless.js"
