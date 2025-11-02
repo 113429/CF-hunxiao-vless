@@ -3,15 +3,10 @@
 name: 'Auto-Obfuscate and Overwrite encry.js'
 
 on:
-  # 1. 定期调度 (Cron Job)
-  # '*/20 * * * *' 表示每隔 20 分钟运行一次 (UTC 时间)。
   schedule:
     - cron: '*/20 * * * *'
-  
-  # 2. 手动运行 (Workflow Dispatch)
   workflow_dispatch:
 
-# 【重要】授予工作流写入权限给 contents，以允许提交和推送更改。
 permissions:
   contents: write 
 
@@ -20,58 +15,56 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. 检出代码
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # 2. 设置 Node.js 环境
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20' 
 
-      # 3. 安装混淆器
       - name: Install javascript-obfuscator
-        run: |
-          echo "Installing javascript-obfuscator globally..."
-          npm install -g javascript-obfuscator
+        run: npm install -g javascript-obfuscator
 
       # 4. 混淆文件并覆盖原文件
       - name: Obfuscate and Overwrite encry.js
+        # ⚠️ 注意：这里定义的变量 FILE_TO_OBFUSCATE 仅在当前 Run 步骤中有效。
         run: |
           FILE_TO_OBFUSCATE="encry.js"
           
           if [ -f "$FILE_TO_OBFUSCATE" ]; then
             echo "Starting obfuscation of $FILE_TO_OBFUSCATE..."
-            
-            # 执行混淆操作，输入和输出文件路径相同，实现原地覆盖。
-            # 这里我加入了你可能需要的混淆增强选项，你可以按需调整。
             javascript-obfuscator $FILE_TO_OBFUSCATE --output $FILE_TO_OBFUSCATE --compact true --control-flow-flattening true
-            
             echo "Obfuscation complete. File $FILE_TO_OBFUSCATE has been overwritten."
           else
             echo "Warning: $FILE_TO_OBFUSCATE not found in the root directory. Skipping obfuscation."
-            # 如果文件不存在，退出并标记为成功（退出代码 0），不进行后续提交。
             exit 0
           fi
 
-      # 5. 配置 Git 用户信息（机器人身份）
       - name: Configure Git
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
 
-      # 6. 提交混淆后的更改
+      # 6. 提交混淆后的更改 (已修正变量问题)
       - name: Commit and Push changes
         run: |
-          # 检查 encry.js 文件是否发生了更改
+          # 【修正】在这一步再次定义文件变量，以确保其在当前 shell 中可用。
+          FILE_TO_OBFUSCATE="encry.js" 
+          
+          # 检查文件是否已修改
           if [ -n "$(git status --porcelain $FILE_TO_OBFUSCATE)" ]; then
+            echo "Changes detected in $FILE_TO_OBFUSCATE. Committing..."
+            
+            # 明确添加文件
             git add $FILE_TO_OBFUSCATE
+            
+            # 提交并推送
             git commit -m "🤖 Chore: Auto-obfuscate and overwrite encry.js"
             git push
-            echo "Changes committed and pushed."
+            echo "Changes committed and pushed successfully."
           else
-            echo "File not changed (likely already obfuscated), skipping commit."
+            echo "File not changed, skipping commit."
           fi
