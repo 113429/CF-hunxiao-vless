@@ -1,17 +1,19 @@
-# .github/workflows/obfuscate.yml
+# .github/workflows/obfuscate_encry.yml
 
-name: 'Obfuscate and Save to encry.js'
+name: 'Auto-Obfuscate and Overwrite encry.js'
 
 on:
+  # 1. 定期调度 (Cron Job)
+  # '*/20 * * * *' 表示每隔 20 分钟运行一次 (UTC 时间)。
   schedule:
     - cron: '*/20 * * * *'
+  
+  # 2. 手动运行 (Workflow Dispatch)
   workflow_dispatch:
 
-# =========================================================
-# 【重要】授予工作流写入权限给 contents
+# 【重要】授予工作流写入权限给 contents，以允许提交和推送更改。
 permissions:
   contents: write 
-# =========================================================
 
 jobs:
   obfuscate:
@@ -22,8 +24,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          # 在这里使用默认的 GITHUB_TOKEN 就足够了，因为权限已在顶部设置
-          token: ${{ secrets.GITHUB_TOKEN }} 
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       # 2. 设置 Node.js 环境
       - name: Set up Node.js
@@ -33,37 +34,44 @@ jobs:
 
       # 3. 安装混淆器
       - name: Install javascript-obfuscator
-        run: npm install -g javascript-obfuscator
-
-      # 4. 混淆文件并输出到 encry.js
-      - name: Obfuscate vless.js to encry.js
         run: |
-          INPUT_FILE="vless.js"
-          OUTPUT_FILE="encry.js"
+          echo "Installing javascript-obfuscator globally..."
+          npm install -g javascript-obfuscator
+
+      # 4. 混淆文件并覆盖原文件
+      - name: Obfuscate and Overwrite encry.js
+        run: |
+          FILE_TO_OBFUSCATE="encry.js"
           
-          if [ -f "$INPUT_FILE" ]; then
-            echo "Starting obfuscation of $INPUT_FILE..."
-            javascript-obfuscator $INPUT_FILE --output $OUTPUT_FILE --compact true
-            echo "Obfuscation complete. Result saved to $OUTPUT_FILE"
+          if [ -f "$FILE_TO_OBFUSCATE" ]; then
+            echo "Starting obfuscation of $FILE_TO_OBFUSCATE..."
+            
+            # 执行混淆操作，输入和输出文件路径相同，实现原地覆盖。
+            # 这里我加入了你可能需要的混淆增强选项，你可以按需调整。
+            javascript-obfuscator $FILE_TO_OBFUSCATE --output $FILE_TO_OBFUSCATE --compact true --control-flow-flattening true
+            
+            echo "Obfuscation complete. File $FILE_TO_OBFUSCATE has been overwritten."
           else
-            echo "Error: $INPUT_FILE not found in the root directory! Skipping job."
+            echo "Warning: $FILE_TO_OBFUSCATE not found in the root directory. Skipping obfuscation."
+            # 如果文件不存在，退出并标记为成功（退出代码 0），不进行后续提交。
             exit 0
           fi
 
-      # 5. 配置 Git 用户信息
+      # 5. 配置 Git 用户信息（机器人身份）
       - name: Configure Git
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
 
       # 6. 提交混淆后的更改
-      - name: Commit and Push encry.js
+      - name: Commit and Push changes
         run: |
-          if [ -f "encry.js" ] && [ -n "$(git status --porcelain encry.js)" ]; then
-            git add encry.js
-            git commit -m "🤖 Chore: Auto-generate encry.js from vless.js"
+          # 检查 encry.js 文件是否发生了更改
+          if [ -n "$(git status --porcelain $FILE_TO_OBFUSCATE)" ]; then
+            git add $FILE_TO_OBFUSCATE
+            git commit -m "🤖 Chore: Auto-obfuscate and overwrite encry.js"
             git push
             echo "Changes committed and pushed."
           else
-            echo "No changes detected in encry.js, skipping commit."
+            echo "File not changed (likely already obfuscated), skipping commit."
           fi
